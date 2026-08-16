@@ -1,0 +1,56 @@
+{
+    "id": "cmspro.mddoc",
+    "name": "Markdown文档",
+    "description": "在线 Markdown 文档预览应用，支持文件夹分类、目录导航、搜索、代码高亮",
+    "version": "1.0.5",
+    "icon": "fa fa-file-text",
+    "author": "CmsPro",
+    "require": {
+        "php": ">=8.3",
+        "cmspro": ">=5.0.0"
+    },
+    "providers": [
+        "ServiceProvider"
+    ],
+    "install": "Install",
+    "menus": [
+        {
+            "title": "文档管理",
+            "icon": "fa fa-file-text",
+            "path": "/admin/cmspro/mddocs",
+            "code": "admin_cmspro_mddoc_groups",
+            "order": 100,
+            "children": [
+                {
+                    "title": "文件管理",
+                    "icon": "fa fa-folder-open",
+                    "path": "/admin/cmspro/mddoc",
+                    "code": "admin_cmspro_mddoc",
+                    "order": 1
+                }
+            ]
+        }
+    ],
+    "home_menus": [
+        {
+            "title": "文档中心",
+            "path": "/docs",
+            "code": "docs",
+            "order": 10
+        }
+    ],
+    "permissions": [
+        {
+            "code": "cmspro.mddoc.manage",
+            "name": "文档管理"
+        },
+        {
+            "code": "cmspro.mddoc.upload",
+            "name": "上传文档"
+        },
+        {
+            "code": "cmspro.mddoc.delete",
+            "name": "删除文档"
+        }
+    ]
+}

@@ -52,5 +52,17 @@
             "code": "cmspro.mddoc.delete",
             "name": "删除文档"
         }
+    ],
+    "runtime_files": [
+        {
+            "key": "mddoc_docs",
+            "name": "Markdown 文档库",
+            "dir": "app/private/mddoc",
+            "type": "other",
+            "description": "文档应用的全部用户 Markdown 文档内容，属业务数据，禁止清理",
+            "cleanable": false,
+            "strategy": "protected",
+            "protected": true
+        }
     ]
 }

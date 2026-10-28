@@ -2,6 +2,7 @@
 
 namespace App\Apps\CmsproMddoc\Controllers\Api;
 
+use App\Apps\CmsproMddoc\Services\BrandService;
 use App\Apps\CmsproMddoc\Services\DocService;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
@@ -10,9 +11,12 @@ class DocApiController extends Controller
 {
     protected DocService $docService;
 
-    public function __construct(DocService $docService)
+    protected BrandService $brandService;
+
+    public function __construct(DocService $docService, BrandService $brandService)
     {
         $this->docService = $docService;
+        $this->brandService = $brandService;
     }
 
     /**
@@ -84,5 +88,36 @@ class DocApiController extends Controller
         return response($content)
             ->header('Content-Type', 'text/markdown; charset=utf-8')
             ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
+    }
+
+    /**
+     * 输出上传的品牌图标文件（未上传时 404，前台应回退内置默认图标）
+     */
+    public function brandIcon()
+    {
+        $path = $this->brandService->uploadedIconPath();
+
+        if ($path === null) {
+            return response()->json([
+                'code' => 1,
+                'message' => '未上传品牌图标',
+                'data' => null,
+            ], 404);
+        }
+
+        $mimeMap = [
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'svg' => 'image/svg+xml',
+            'webp' => 'image/webp',
+        ];
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        return response()->file($path, [
+            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Cache-Control' => 'public, max-age=3600',
+        ]);
     }
 }

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 应用背景：蓝色渐变圆角方块 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4e6ef2"/>
+      <stop offset="1" stop-color="#7c93f5"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dbe4ff"/>
+      <stop offset="1" stop-color="#c3cfff"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)"/>
+
+  <!-- 文档纸张（右下微投影） -->
+  <path d="M21 13h15l11 11v26a2 2 0 0 1-2 2H21a2 2 0 0 1-2-2V15a2 2 0 0 1 2-2z" fill="#ffffff" opacity="0.97"/>
+  <!-- 折角 -->
+  <path d="M36 13l11 11h-9a2 2 0 0 1-2-2z" fill="url(#fold)"/>
+
+  <!-- 文字线 -->
+  <path d="M24 23h10" stroke="#c3cfff" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M24 28h7" stroke="#c3cfff" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Markdown 徽章：圆角框内 M↓ -->
+  <rect x="22.5" y="32" width="19" height="12" rx="2.5" fill="none" stroke="#4e6ef2" stroke-width="1.8"/>
+  <path d="M26 41v-6l2.75 3.25L31.5 35v6" fill="none" stroke="#4e6ef2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M38 35.5V41m0 0l-2.5-2.5M38 41l2.5-2.5" fill="none" stroke="#4e6ef2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

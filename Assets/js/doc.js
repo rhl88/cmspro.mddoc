@@ -6,8 +6,10 @@
 // 配置
 const CONFIG = {
     apiBase: '/api/mddoc',
-    cacheKey: 'mddoc_structure_cache',
-    searchCacheKey: 'mddoc_search_cache',
+    cacheKey: 'mddoc_structure_cache_v2',
+    searchCacheKey: 'mddoc_search_cache_v2',
+    legacyCacheKeys: ['mddoc_structure_cache', 'mddoc_search_cache'],
+    themeKey: 'mddoc_theme',
     cacheExpiry: 5 * 60 * 1000,
 };
 
@@ -17,6 +19,7 @@ const state = {
     currentFile: null,
     activeCategory: null,
     searchIndex: [],
+    searchIndexReady: false,
 };
 
 // DOM 元素
@@ -29,7 +32,46 @@ const elements = {
     searchInput: null,
     searchClear: null,
     searchResults: null,
+    breadcrumb: null,
+    prevNext: null,
+    sidebar: null,
+    sidebarOverlay: null,
+    themeToggle: null,
 };
+
+// 主题初始化与切换
+function initTheme() {
+    const saved = localStorage.getItem(CONFIG.themeKey);
+    const theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+
+    if (elements.themeToggle) {
+        elements.themeToggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem(CONFIG.themeKey, next);
+        });
+    }
+}
+
+// 清理旧版本缓存键
+function cleanupLegacyCache() {
+    CONFIG.legacyCacheKeys.forEach(key => {
+        try { localStorage.removeItem(key); } catch {}
+    });
+}
+
+// 移动端抽屉开关
+function toggleSidebar(open) {
+    if (!elements.sidebar || !elements.sidebarOverlay) return;
+    elements.sidebar.classList.toggle('open', open);
+    elements.sidebarOverlay.classList.toggle('active', open);
+}
+
+function closeSidebar() {
+    toggleSidebar(false);
+}
 
 // 初始化
 async function init() {
@@ -41,6 +83,11 @@ async function init() {
     elements.searchInput = document.getElementById('search-input');
     elements.searchClear = document.getElementById('search-clear');
     elements.searchResults = document.getElementById('search-results');
+    elements.breadcrumb = document.getElementById('breadcrumb');
+    elements.prevNext = document.getElementById('prev-next');
+    elements.sidebar = document.getElementById('sidebar');
+    elements.sidebarOverlay = document.getElementById('sidebar-overlay');
+    elements.themeToggle = document.getElementById('theme-toggle');
 
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('scroll', handleScroll);
@@ -49,14 +96,41 @@ async function init() {
         elements.backToTop.addEventListener('click', scrollToTop);
     }
 
+    // 主题切换
+    initTheme();
+
+    // 移动端抽屉
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', () => toggleSidebar(!elements.sidebar.classList.contains('open')));
+    }
+    if (elements.sidebarOverlay) {
+        elements.sidebarOverlay.addEventListener('click', closeSidebar);
+    }
+
+    // 快捷键：/ 聚焦搜索
+    document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && elements.searchInput
+            && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            elements.searchInput.focus();
+        }
+    });
+
+    // 清理旧版本缓存
+    cleanupLegacyCache();
+
     initSearch();
 
     try {
         showLoading();
         await loadStructure();
-        await buildSearchIndex();
         renderNavigation();
         handleHashChange();
+        // 搜索索引后台构建，不阻塞导航渲染
+        buildSearchIndex().catch((error) => {
+            console.warn('搜索索引构建失败:', error);
+        });
     } catch (error) {
         console.error('初始化失败:', error);
         showError('初始化失败: ' + error.message);
@@ -239,6 +313,7 @@ function navigateToFile(file, categoryId) {
 
     loadDocument(file);
     updateActiveState(file, categoryId);
+    closeSidebar();
 }
 
 // 更新活动状态
@@ -247,7 +322,7 @@ function updateActiveState(file, categoryId) {
         a.classList.remove('active');
     });
 
-    const activeLink = document.querySelector(`#nav-list a[data-file="${file}"]`);
+    const activeLink = document.querySelector(`#nav-list a[data-file="${CSS.escape(file)}"]`);
     if (activeLink) {
         activeLink.classList.add('active');
     }
@@ -320,6 +395,8 @@ function renderDocument(content, file) {
         generateTOC();
         processDocumentLinks(file);
         appendDownloadBtn(file);
+        renderBreadcrumb(file);
+        renderPrevNext(file);
 
         const doc = findFileByName(file);
         document.title = (doc ? doc.name + ' - ' : '') + '文档中心';
@@ -340,6 +417,82 @@ function findFileByName(file) {
         if (found) return found;
     }
     return null;
+}
+
+// 按导航顺序扁平化全部文件（用于计算上/下一篇）
+function flattenFiles() {
+    if (!state.structure?.categories) return [];
+    const flat = [];
+    for (const category of state.structure.categories) {
+        if (category.files) {
+            for (const file of category.files) {
+                flat.push({
+                    file: file.file,
+                    name: file.name,
+                    categoryName: category.name,
+                });
+            }
+        }
+    }
+    return flat;
+}
+
+// 渲染面包屑：分类名 / 文档名
+function renderBreadcrumb(file) {
+    if (!elements.breadcrumb) return;
+
+    const category = findCategoryForFile(file);
+    const doc = findFileByName(file);
+    const fileName = doc ? doc.name : decodeURIComponent(file.split('/').pop().replace(/\.md$/, ''));
+
+    if (category) {
+        elements.breadcrumb.innerHTML = `
+            <span class="crumb-link">${escapeHtml(category.name)}</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb-current">${escapeHtml(fileName)}</span>
+        `;
+    } else {
+        elements.breadcrumb.innerHTML = `
+            <span class="crumb-current">${escapeHtml(fileName)}</span>
+        `;
+    }
+}
+
+// 渲染上一篇 / 下一篇
+function renderPrevNext(file) {
+    if (!elements.prevNext) return;
+
+    const flat = flattenFiles();
+    const index = flat.findIndex(item => item.file === file);
+    const prev = index > 0 ? flat[index - 1] : null;
+    const next = index >= 0 && index < flat.length - 1 ? flat[index + 1] : null;
+
+    if (!prev && !next) {
+        elements.prevNext.innerHTML = '';
+        return;
+    }
+
+    const prevHtml = prev ? `
+        <a class="pn-link pn-prev" href="#/doc/${encodeURIComponent(prev.file)}">
+            <span class="pn-label">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                上一篇
+            </span>
+            <span class="pn-title">${escapeHtml(prev.name)}</span>
+        </a>
+    ` : '<span class="pn-placeholder"></span>';
+
+    const nextHtml = next ? `
+        <a class="pn-link pn-next" href="#/doc/${encodeURIComponent(next.file)}">
+            <span class="pn-label">
+                下一篇
+                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/></svg>
+            </span>
+            <span class="pn-title">${escapeHtml(next.name)}</span>
+        </a>
+    ` : '<span class="pn-placeholder"></span>';
+
+    elements.prevNext.innerHTML = prevHtml + nextHtml;
 }
 
 // 处理代码块
@@ -707,6 +860,7 @@ async function buildSearchIndex() {
     const cached = getCachedData(CONFIG.searchCacheKey);
     if (cached) {
         state.searchIndex = cached;
+        state.searchIndexReady = true;
         return;
     }
 
@@ -725,30 +879,46 @@ async function buildSearchIndex() {
         }
     }
 
-    const index = [];
-    for (const file of allFiles) {
+    // 并行拉取全部文件内容，避免串行请求拖慢索引构建
+    const entries = await Promise.all(allFiles.map(async (file) => {
         try {
             const content = await fetchFileContent(file.file);
-            index.push({
+            return {
                 file: file.file,
                 categoryName: file.categoryName,
                 categoryId: file.categoryId,
                 title: file.title || file.name,
                 content: content,
                 name: file.name
-            });
+            };
         } catch (e) {
             console.warn('无法索引文件:', file.file, e);
+            return null;
         }
-    }
+    }));
 
-    state.searchIndex = index;
-    cacheData(CONFIG.searchCacheKey, index);
+    state.searchIndex = entries.filter(Boolean);
+    state.searchIndexReady = true;
+    cacheData(CONFIG.searchCacheKey, state.searchIndex);
 }
 
 // 执行搜索
 function performSearch(query) {
-    if (!query || state.searchIndex.length === 0) {
+    if (!query) {
+        hideSearchResults();
+        return;
+    }
+
+    // 索引后台构建中，给出提示
+    if (!state.searchIndexReady) {
+        if (elements.searchResults) {
+            elements.searchResults.innerHTML = '<div class="search-no-results">搜索索引构建中，请稍候…</div>';
+            showSearchResults();
+        }
+        return;
+    }
+
+    if (state.searchIndex.length === 0) {
         hideSearchResults();
         return;
     }

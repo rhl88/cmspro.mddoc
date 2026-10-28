@@ -2,6 +2,7 @@
 
 namespace App\Apps\CmsproMddoc\Controllers\Admin;
 
+use App\Apps\CmsproMddoc\Services\BrandService;
 use App\Apps\CmsproMddoc\Services\DocService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -10,9 +11,12 @@ class DocManageController extends Controller
 {
     protected DocService $docService;
 
-    public function __construct(DocService $docService)
+    protected BrandService $brandService;
+
+    public function __construct(DocService $docService, BrandService $brandService)
     {
         $this->docService = $docService;
+        $this->brandService = $brandService;
     }
 
     /**
@@ -21,6 +25,92 @@ class DocManageController extends Controller
     public function index()
     {
         return view('cmspro.mddoc::Admin.index');
+    }
+
+    /**
+     * 应用设置页（前台品牌配置）
+     */
+    public function settings()
+    {
+        return view('cmspro.mddoc::Admin.settings', [
+            'values' => $this->brandService->values(),
+            'hasIcon' => $this->brandService->uploadedIconPath() !== null,
+            'navs' => $this->brandService->navs(),
+            'defaults' => $this->brandService->resolved(),
+        ]);
+    }
+
+    /**
+     * 保存前台导航菜单（title/url 数组，最多 10 项）
+     */
+    public function saveNavs(Request $request)
+    {
+        $request->validate([
+            'navs' => 'required|array|max:10',
+            'navs.*.title' => 'required|string|max:30',
+            'navs.*.url' => 'required|string|max:500',
+        ]);
+
+        $navs = [];
+        foreach ($request->input('navs', []) as $item) {
+            $navs[] = [
+                'title' => trim((string) ($item['title'] ?? '')),
+                'url' => trim((string) ($item['url'] ?? '')),
+            ];
+        }
+
+        $this->brandService->saveNavs($navs);
+
+        return response()->json(['code' => 0, 'message' => '菜单保存成功，前台刷新后生效']);
+    }
+
+    /**
+     * 保存应用设置（前台品牌配置）
+     */
+    public function saveSettings(Request $request)
+    {
+        $request->validate([
+            'brand_name' => 'nullable|string|max:50',
+            'brand_link' => 'nullable|string|max:500',
+        ]);
+
+        $this->brandService->save([
+            'name' => (string) $request->input('brand_name', ''),
+            'link' => (string) $request->input('brand_link', ''),
+        ]);
+
+        return response()->json(['code' => 0, 'message' => '保存成功，前台刷新后生效']);
+    }
+
+    /**
+     * 上传品牌图标（png/jpg/jpeg/gif/svg/webp，≤2MB）
+     */
+    public function uploadIcon(Request $request)
+    {
+        $request->validate([
+            'icon' => 'required|file|mimes:png,jpg,jpeg,gif,svg,webp|max:2048',
+        ]);
+
+        $fileName = $this->brandService->saveIcon($request->file('icon'));
+
+        return response()->json([
+            'code' => 0,
+            'message' => '图标上传成功',
+            'data' => [
+                'file' => $fileName,
+                'icon_url' => '/api/mddoc/brand-icon?v=' . time(),
+            ],
+        ]);
+    }
+
+    /**
+     * 恢复默认品牌图标（删除上传文件并清空配置）
+     */
+    public function resetIcon()
+    {
+        $this->brandService->resetIcon();
+
+        return response()->json(['code' => 0, 'message' => '已恢复默认图标']);
     }
 
     /**
